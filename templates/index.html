@@ -1,4 +1,4 @@
-        <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -8,7 +8,7 @@
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #bec1cb 0%, #c3bdc9 100%);
+            background: linear-gradient(135deg, #9cade3 0%, #a487c1 100%);
             min-height: 100vh;
         }
         .card {
@@ -22,7 +22,7 @@
             transform: translateY(-5px);
         }
         .btn-primary {
-            background: linear-gradient(135deg, #bfc1ca 0%, #c1bcc6 100%);
+            background: linear-gradient(135deg, #aab2d5 0%, #aa91c3 100%);
             color: white;
             padding: 12px 30px;
             border-radius: 25px;
@@ -55,7 +55,7 @@
             width: 60px;
             height: 60px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #ced0da 0%, #ccc6d2 100%);
+            background: linear-gradient(135deg, #9ca9e7 0%, #aa90c5 100%);
             color: white;
             border: none;
             font-size: 24px;
@@ -76,7 +76,7 @@
             max-width: 80%;
         }
         .user-message {
-            background: #667eea;
+            background: #757faa;
             color: white;
             margin-left: auto;
         }
@@ -86,7 +86,7 @@
         }
         .language-btn {
             background: white;
-            border: 3px solid #667eea;
+            border: 3px solid #6974a6;
             padding: 20px 40px;
             border-radius: 15px;
             font-size: 20px;
@@ -95,7 +95,7 @@
             margin: 10px;
         }
         .language-btn:hover {
-            background: #667eea;
+            background: #8c97c4;
             color: white;
             transform: scale(1.1);
         }
@@ -104,7 +104,7 @@
 <body>
     <div id="languageScreen" class="flex items-center justify-center min-h-screen">
         <div class="card text-center">
-            <h1 class="text-4xl font-bold mb-6" style="color: #9d9ea5;">🌾 Agricultural Detection System</h1>
+            <h1 class="text-4xl font-bold mb-6" style="color: #747cbc;">🌾 Agricultural Detection System</h1>
             <p class="text-xl mb-8">Select Your Language / अपनी भाषा चुनें / ನಿಮ್ಮ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ</p>
             <div class="flex flex-wrap justify-center">
                 <button class="language-btn" onclick="setLanguage('en')">🇬🇧 English</button>
@@ -128,7 +128,7 @@
 
         <div id="modeSelection" class="container mx-auto px-4 py-8">
             <div class="card max-w-4xl mx-auto text-center">
-                <h1 class="text-4xl font-bold mb-2" style="color: #c0c4d4;">🌾 <span id="appTitle">Agricultural Detection System</span></h1>
+                <h1 class="text-4xl font-bold mb-2" style="color: #7681af;">🌾 <span id="appTitle">Agricultural Detection System</span></h1>
                 <p class="text-xl mb-8 text-gray-600" id="chooseText">Choose what you want to analyze:</p>
                 <div class="grid md:grid-cols-2 gap-6">
                     <div class="card cursor-pointer" onclick="showSoilDetection()">
@@ -148,7 +148,7 @@
         <div id="soilModule" style="display: none;" class="container mx-auto px-4 py-8">
             <div class="card max-w-4xl mx-auto">
                 <button onclick="showModeSelection()" class="mb-4 text-blue-600 hover:text-blue-800">← <span id="backBtn">Back</span></button>
-                <h2 class="text-3xl font-bold mb-6 text-center" style="color: #b2b4bd;">🌍 <span id="soilTitle">Soil Detection</span></h2>
+                <h2 class="text-3xl font-bold mb-6 text-center" style="color: #6974a2;">🌍 <span id="soilTitle">Soil Detection</span></h2>
                 <div class="mb-6">
                     <label class="block text-lg font-semibold mb-2" id="uploadLandLabel">Upload Land Image:</label>
                     <input type="file" id="landImage" accept="image/*" capture="environment" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100">
@@ -175,7 +175,7 @@
         <div id="plantModule" style="display: none;" class="container mx-auto px-4 py-8">
             <div class="card max-w-4xl mx-auto">
                 <button onclick="showModeSelection()" class="mb-4 text-blue-600 hover:text-blue-800">← <span id="backBtn2">Back</span></button>
-                <h2 class="text-3xl font-bold mb-6 text-center" style="color: #cbccd2;">🌱 <span id="plantTitle">Plant Health Check</span></h2>
+                <h2 class="text-3xl font-bold mb-6 text-center" style="color: #757eb2;">🌱 <span id="plantTitle">Plant Health Check</span></h2>
                 <div class="mb-6">
                     <label class="block text-lg font-semibold mb-2" id="uploadPlantLabel">Upload Plant Image:</label>
                     <input type="file" id="plantImage" accept="image/*" capture="environment" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100">
@@ -386,3 +386,4 @@ async function analyzePlant() {
     </script>
 </body>
 </html>
+   

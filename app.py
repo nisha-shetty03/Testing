@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import random
 
 app = Flask(__name__)
@@ -238,28 +238,28 @@ def predict_plant_health():
     
     return jsonify(health_data)
 
+
 @app.route('/chatbot', methods=['POST'])
 def chatbot():
     data = request.json
     message = data.get('message', '')
     language = data.get('language', 'en')
-    
     responses = {
         'en': {
             'default': 'I can help you with crop suggestions, soil analysis, and plant health questions. What would you like to know?',
-            'soil': 'Soil testing is crucial for determining pH levels and nutrient content. Would you like specific advice?',
+            'Can I scan another plant?': 'yes you can , use the back button on the top left corner',
             'crop': 'I can suggest crops based on your soil type and climate. Please analyze your land first.',
             'disease': 'Upload a plant image for disease detection and treatment recommendations.'
         },
         'hi': {
             'default': 'मैं फसल सुझाव, मिट्टी विश्लेषण और पौधे के स्वास्थ्य प्रश्नों में आपकी मदद कर सकता हूं। आप क्या जानना चाहेंगे?',
-            'soil': 'पीएच स्तर और पोषक तत्व सामग्री निर्धारित करने के लिए मिट्टी परीक्षण महत्वपूर्ण है।',
+            'क्या मैं एक और पौधा स्कैन कर सकता हूँ?': 'हाँ, आप कर सकते हैं, ऊपर बाएँ कोने में मौजूद बैक बटन का इस्तेमाल करें।',
             'crop': 'मैं आपकी मिट्टी के प्रकार और जलवायु के आधार पर फसलों का सुझाव दे सकता हूं।',
             'disease': 'रोग का पता लगाने और उपचार की सिफारिशों के लिए पौधे की छवि अपलोड करें।'
         },
         'kn': {
             'default': 'ನಾನು ಬೆಳೆ ಸಲಹೆಗಳು, ಮಣ್ಣಿನ ವಿಶ್ಲೇಷಣೆ ಮತ್ತು ಸಸ್ಯ ಆರೋಗ್ಯ ಪ್ರಶ್ನೆಗಳಲ್ಲಿ ನಿಮಗೆ ಸಹಾಯ ಮಾಡಬಹುದು.',
-            'soil': 'pH ಮಟ್ಟಗಳು ಮತ್ತು ಪೋಷಕಾಂಶದ ಅಂಶವನ್ನು ನಿರ್ಧರಿಸಲು ಮಣ್ಣಿನ ಪರೀಕ್ಷೆ ಬಹಳ ಮುಖ್ಯ.',
+            'ನಾನು ಇನ್ನೊಂದು ಗಿಡವನ್ನು ಸ್ಕ್ಯಾನ್ ಮಾಡಬಹುದಾ?': 'pH ಮಟ್ಟಗಳು ಮತ್ತು ಪೋಷಕಾಂಶದ ಅಂಶವನ್ನು ನಿರ್ಧರಿಸಲು ಮಣ್ಣಿನ ಪರೀಕ್ಷೆ ಬಹಳ ಮುಖ್ಯ.',
             'crop': 'ನಿಮ್ಮ ಮಣ್ಣಿನ ಪ್ರಕಾರ ಮತ್ತು ಹವಾಮಾನದ ಆಧಾರದ ಮೇಲೆ ನಾನು ಬೆಳೆಗಳನ್ನು ಸೂಚಿಸಬಹುದು.',
             'disease': 'ರೋಗ ಪತ್ತೆ ಮತ್ತು ಚಿಕಿತ್ಸಾ ಶಿಫಾರಸುಗಳಿಗಾಗಿ ಸಸ್ಯದ ಚಿತ್ರವನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ.'
         }
@@ -281,3 +281,4 @@ def chatbot():
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)
+        
