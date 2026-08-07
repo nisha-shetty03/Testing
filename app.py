@@ -1,7 +1,10 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+import os
 import random
 
+from flask import Flask, jsonify, render_template, request
+
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
 # Translation dictionaries for UI
 TRANSLATIONS = {
@@ -156,9 +159,6 @@ PLANT_DATA = {
         'health_statuses': ['स्वस्थ', 'हल्की बीमारी', 'मध्यम बीमारी', 'ध्यान चाहिए'],
         'issues': [
             'कोई बड़ी समस्या नहीं मिली',
-            'प्रारंभिक झ'],
-        'issues': [
-            'कोई बड़ी समस्या नहीं मिली',
             'प्रारंभिक झुलसा रोग का पता चला',
             'पत्ती के धब्बे देखे गए',
             'पोषक तत्व की कमी का पता चला',
@@ -247,28 +247,33 @@ def chatbot():
     responses = {
         'en': {
             'default': 'I can help you with crop suggestions, soil analysis, and plant health questions. What would you like to know?',
-            'Can I scan another plant?': 'yes you can , use the back button on the top left corner',
+            'soil': 'Upload a land image in the Soil Detection section to analyze land type, climate, pH, and get crop suggestions.',
             'crop': 'I can suggest crops based on your soil type and climate. Please analyze your land first.',
-            'disease': 'Upload a plant image for disease detection and treatment recommendations.'
+            'disease': 'Upload a plant image for disease detection and treatment recommendations.',
+            'scan': 'Yes, you can scan another plant. Use the back button in the top-left corner to return to the main menu.'
         },
         'hi': {
             'default': 'मैं फसल सुझाव, मिट्टी विश्लेषण और पौधे के स्वास्थ्य प्रश्नों में आपकी मदद कर सकता हूं। आप क्या जानना चाहेंगे?',
-            'क्या मैं एक और पौधा स्कैन कर सकता हूँ?': 'हाँ, आप कर सकते हैं, ऊपर बाएँ कोने में मौजूद बैक बटन का इस्तेमाल करें।',
-            'crop': 'मैं आपकी मिट्टी के प्रकार और जलवायु के आधार पर फसलों का सुझाव दे सकता हूं।',
-            'disease': 'रोग का पता लगाने और उपचार की सिफारिशों के लिए पौधे की छवि अपलोड करें।'
+            'soil': 'भूमि प्रकार, जलवायु, pH का विश्लेषण करने और फसल सुझाव पाने के लिए मिट्टी पहचान अनुभाग में भूमि की छवि अपलोड करें।',
+            'crop': 'मैं आपकी मिट्टी के प्रकार और जलवायु के आधार पर फसलों का सुझाव दे सकता हूं। कृपया पहले अपनी भूमि का विश्लेषण करें।',
+            'disease': 'रोग का पता लगाने और उपचार की सिफारिशों के लिए पौधे की छवि अपलोड करें।',
+            'scan': 'हाँ, आप कर सकते हैं। मुख्य मेनू पर वापस जाने के लिए ऊपर बाएँ कोने में बैक बटन का उपयोग करें।'
         },
         'kn': {
             'default': 'ನಾನು ಬೆಳೆ ಸಲಹೆಗಳು, ಮಣ್ಣಿನ ವಿಶ್ಲೇಷಣೆ ಮತ್ತು ಸಸ್ಯ ಆರೋಗ್ಯ ಪ್ರಶ್ನೆಗಳಲ್ಲಿ ನಿಮಗೆ ಸಹಾಯ ಮಾಡಬಹುದು.',
-            'ನಾನು ಇನ್ನೊಂದು ಗಿಡವನ್ನು ಸ್ಕ್ಯಾನ್ ಮಾಡಬಹುದಾ?': 'pH ಮಟ್ಟಗಳು ಮತ್ತು ಪೋಷಕಾಂಶದ ಅಂಶವನ್ನು ನಿರ್ಧರಿಸಲು ಮಣ್ಣಿನ ಪರೀಕ್ಷೆ ಬಹಳ ಮುಖ್ಯ.',
-            'crop': 'ನಿಮ್ಮ ಮಣ್ಣಿನ ಪ್ರಕಾರ ಮತ್ತು ಹವಾಮಾನದ ಆಧಾರದ ಮೇಲೆ ನಾನು ಬೆಳೆಗಳನ್ನು ಸೂಚಿಸಬಹುದು.',
-            'disease': 'ರೋಗ ಪತ್ತೆ ಮತ್ತು ಚಿಕಿತ್ಸಾ ಶಿಫಾರಸುಗಳಿಗಾಗಿ ಸಸ್ಯದ ಚಿತ್ರವನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ.'
+            'soil': 'ಭೂಮಿ ಪ್ರಕಾರ, ಹವಾಮಾನ, pH ವಿಶ್ಲೇಷಿಸಲು ಮತ್ತು ಬೆಳೆ ಸಲಹೆಗಳನ್ನು ಪಡೆಯಲು ಮಣ್ಣಿನ ಪತ್ತೆ ವಿಭಾಗದಲ್ಲಿ ಭೂಮಿಯ ಚಿತ್ರವನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ.',
+            'crop': 'ನಿಮ್ಮ ಮಣ್ಣಿನ ಪ್ರಕಾರ ಮತ್ತು ಹವಾಮಾನದ ಆಧಾರದ ಮೇಲೆ ನಾನು ಬೆಳೆಗಳನ್ನು ಸೂಚಿಸಬಹುದು. ದಯವಿಟ್ಟು ಮೊದಲು ನಿಮ್ಮ ಭೂಮಿಯನ್ನು ವಿಶ್ಲೇಷಿಸಿ.',
+            'disease': 'ರೋಗ ಪತ್ತೆ ಮತ್ತು ಚಿಕಿತ್ಸಾ ಶಿಫಾರಸುಗಳಿಗಾಗಿ ಸಸ್ಯದ ಚಿತ್ರವನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ.',
+            'scan': 'ಹೌದು, ನೀವು ಮತ್ತೊಂದು ಸಸ್ಯವನ್ನು ಸ್ಕ್ಯಾನ್ ಮಾಡಬಹುದು. ಮುಖ್ಯ ಮೆನುಗೆ ಹಿಂತಿರುಗಲು ಮೇಲಿನ ಎಡ ಮೂಲೆಯಲ್ಲಿರುವ ಹಿಂದೆ ಬಟನ್ ಬಳಸಿ.'
         }
     }
     
     message_lower = message.lower()
     lang_responses = responses.get(language, responses['en'])
     
-    if 'soil' in message_lower or 'मिट्टी' in message_lower or 'ಮಣ್ಣು' in message_lower:
+    if 'scan' in message_lower or 'another plant' in message_lower:
+        response_text = lang_responses['scan']
+    elif 'soil' in message_lower or 'मिट्टी' in message_lower or 'ಮಣ್ಣು' in message_lower:
         response_text = lang_responses['soil']
     elif 'crop' in message_lower or 'फसल' in message_lower or 'ಬೆಳೆ' in message_lower:
         response_text = lang_responses['crop']
@@ -280,5 +285,6 @@ def chatbot():
     return jsonify({'response': response_text})
 
 if __name__ == '__main__':
-    app.run(debug=True, host='127.0.0.1', port=5000)
-        
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    app.run(debug=debug, host='0.0.0.0', port=port)
