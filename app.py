@@ -35,11 +35,16 @@ def load_plant_model():
         return
     try:
         try:
-            from tflite_runtime.interpreter import Interpreter
-            print('[plant_health] Using tflite_runtime')
-        except ImportError as e1:
-            print('[plant_health] tflite_runtime unavailable (', e1, '), trying tensorflow.lite')
-            from tensorflow.lite.python.interpreter import Interpreter
+            from ai_edge_litert.interpreter import Interpreter
+            print('[plant_health] Using ai_edge_litert')
+        except ImportError as e0:
+            print('[plant_health] ai_edge_litert unavailable (', e0, '), trying tflite_runtime')
+            try:
+                from tflite_runtime.interpreter import Interpreter
+                print('[plant_health] Using tflite_runtime')
+            except ImportError as e1:
+                print('[plant_health] tflite_runtime unavailable (', e1, '), trying tensorflow.lite')
+                from tensorflow.lite.python.interpreter import Interpreter
         plant_interpreter = Interpreter(model_path=TFLITE_PATH)
         plant_interpreter.allocate_tensors()
         with open(CLASS_NAMES_PATH) as f:
