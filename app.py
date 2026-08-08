@@ -25,17 +25,20 @@ IMG_SIZE = (160, 160)
 
 plant_interpreter = None
 plant_class_names = None
+plant_model_load_error = None
 
 def load_plant_model():
-    global plant_interpreter, plant_class_names
+    global plant_interpreter, plant_class_names, plant_model_load_error
     if not (os.path.exists(TFLITE_PATH) and os.path.exists(CLASS_NAMES_PATH)):
-        print('[plant_health] No trained model found at', TFLITE_PATH,
-              '- using simulated predictions until a model is added.')
+        plant_model_load_error = f"Model files not found at {TFLITE_PATH}"
+        print('[plant_health]', plant_model_load_error, '- using simulated predictions until a model is added.')
         return
     try:
         try:
             from tflite_runtime.interpreter import Interpreter
-        except ImportError:
+            print('[plant_health] Using tflite_runtime')
+        except ImportError as e1:
+            print('[plant_health] tflite_runtime unavailable (', e1, '), trying tensorflow.lite')
             from tensorflow.lite.python.interpreter import Interpreter
         plant_interpreter = Interpreter(model_path=TFLITE_PATH)
         plant_interpreter.allocate_tensors()
@@ -43,7 +46,8 @@ def load_plant_model():
             plant_class_names = json.load(f)
         print(f'[plant_health] Loaded model with {len(plant_class_names)} classes.')
     except Exception as e:
-        print('[plant_health] Failed to load model, falling back to simulated predictions:', e)
+        plant_model_load_error = f"{type(e).__name__}: {e}"
+        print('[plant_health] Failed to load model, falling back to simulated predictions:', plant_model_load_error)
         plant_interpreter = None
 
 load_plant_model()
@@ -304,6 +308,17 @@ def predict_details():
     }
     
     return jsonify(prediction)
+
+@app.route('/model-status')
+def model_status():
+    return jsonify({
+        'model_loaded': plant_interpreter is not None,
+        'load_error': plant_model_load_error,
+        'model_dir': MODEL_DIR,
+        'tflite_file_present': os.path.exists(TFLITE_PATH),
+        'class_names_file_present': os.path.exists(CLASS_NAMES_PATH),
+        'class_names': plant_class_names,
+    })
 
 @app.route('/predict-plant-health', methods=['POST'])
 def predict_plant_health():
