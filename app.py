@@ -1,10 +1,104 @@
 import os
+import io
+import json
 import random
+import numpy as np
+from PIL import Image
 
 from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# ---------------------------------------------------------------------------
+# Plant health model loading
+#
+# Put a trained model at models/plant_health_model.tflite (produced by
+# train.py or train_full_colab.py) and models/class_names.json next to this
+# file. If they're not present, the endpoint below falls back to the old
+# simulated/random behavior so the app keeps running either way.
+# ---------------------------------------------------------------------------
+MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
+TFLITE_PATH = os.path.join(MODEL_DIR, 'plant_health_model.tflite')
+CLASS_NAMES_PATH = os.path.join(MODEL_DIR, 'class_names.json')
+IMG_SIZE = (160, 160)
+
+plant_interpreter = None
+plant_class_names = None
+plant_model_load_error = None
+
+def load_plant_model():
+    global plant_interpreter, plant_class_names, plant_model_load_error
+    if not (os.path.exists(TFLITE_PATH) and os.path.exists(CLASS_NAMES_PATH)):
+        plant_model_load_error = f"Model files not found at {TFLITE_PATH}"
+        print('[plant_health]', plant_model_load_error, '- using simulated predictions until a model is added.')
+        return
+    try:
+        try:
+            from ai_edge_litert.interpreter import Interpreter
+            print('[plant_health] Using ai_edge_litert')
+        except ImportError as e0:
+            print('[plant_health] ai_edge_litert unavailable (', e0, '), trying tflite_runtime')
+            try:
+                from tflite_runtime.interpreter import Interpreter
+                print('[plant_health] Using tflite_runtime')
+            except ImportError as e1:
+                print('[plant_health] tflite_runtime unavailable (', e1, '), trying tensorflow.lite')
+                from tensorflow.lite.python.interpreter import Interpreter
+        plant_interpreter = Interpreter(model_path=TFLITE_PATH)
+        plant_interpreter.allocate_tensors()
+        with open(CLASS_NAMES_PATH) as f:
+            plant_class_names = json.load(f)
+        print(f'[plant_health] Loaded model with {len(plant_class_names)} classes.')
+    except Exception as e:
+        plant_model_load_error = f"{type(e).__name__}: {e}"
+        print('[plant_health] Failed to load model, falling back to simulated predictions:', plant_model_load_error)
+        plant_interpreter = None
+
+load_plant_model()
+
+# Maps disease-name keywords -> one of the original recommendation "buckets"
+# (kept from the app's existing translated recommendation lists, so hi/kn
+# recommendations stay available without needing a full 38-class translation
+# table). 0=healthy, 1=fungal/blight, 2=spot/mildew/rust, 3=nutrient,
+# 4=pest/virus.
+_KEYWORD_TO_BUCKET = [
+    (['healthy'], 0),
+    (['blight', 'rot', 'mold', 'mould'], 1),
+    (['scab', 'spot', 'mildew', 'rust', 'measles'], 2),
+    (['deficiency'], 3),
+    (['virus', 'mite', 'pest', 'greening', 'bacterial'], 4),
+]
+
+def classify_condition(condition_lower):
+    for keywords, bucket in _KEYWORD_TO_BUCKET:
+        if any(k in condition_lower for k in keywords):
+            return bucket
+    return 1  # default to the general fungal/treatment bucket
+
+def run_plant_inference(image_bytes):
+    """Returns (crop, condition, confidence) or None if no model is loaded."""
+    if plant_interpreter is None:
+        return None
+    img = Image.open(io.BytesIO(image_bytes)).convert('RGB').resize(IMG_SIZE)
+    arr = np.asarray(img, dtype=np.float32)[np.newaxis, ...]  # (1, H, W, 3), 0-255
+
+    input_details = plant_interpreter.get_input_details()
+    output_details = plant_interpreter.get_output_details()
+    plant_interpreter.set_tensor(input_details[0]['index'], arr)
+    plant_interpreter.invoke()
+    output = plant_interpreter.get_tensor(output_details[0]['index'])[0]
+
+    idx = int(np.argmax(output))
+    confidence = float(output[idx])
+    class_name = plant_class_names[idx]
+
+    if '___' in class_name:
+        crop, condition = class_name.split('___', 1)
+    else:
+        crop, condition = '', class_name
+    condition = condition.replace('_', ' ').strip()
+    return crop.replace('_', ' ').strip(), condition, confidence
 
 # Translation dictionaries for UI
 TRANSLATIONS = {
@@ -220,22 +314,73 @@ def predict_details():
     
     return jsonify(prediction)
 
+@app.route('/model-status')
+def model_status():
+    return jsonify({
+        'model_loaded': plant_interpreter is not None,
+        'load_error': plant_model_load_error,
+        'model_dir': MODEL_DIR,
+        'tflite_file_present': os.path.exists(TFLITE_PATH),
+        'class_names_file_present': os.path.exists(CLASS_NAMES_PATH),
+        'class_names': plant_class_names,
+    })
+
 @app.route('/predict-plant-health', methods=['POST'])
 def predict_plant_health():
     if 'image' not in request.files:
         return jsonify({'error': 'No image uploaded'}), 400
-    
+
     # Get language from request or default to English
     lang = request.form.get('language', 'en')
     plant_data = PLANT_DATA.get(lang, PLANT_DATA['en'])
-    
+
+    image_file = request.files['image']
+    result = None
+    try:
+        result = run_plant_inference(image_file.read())
+    except Exception as e:
+        print('[plant_health] Inference error, falling back to simulated result:', e)
+        result = None
+
+    if result is None:
+        # No trained model available yet (or inference failed) - old simulated behavior
+        health_data = {
+            'health_status': random.choice(plant_data['health_statuses']),
+            'health_score': f"{random.randint(60, 98)}%",
+            'detected_issues': random.choice(plant_data['issues']),
+            'recommendations': random.choice(plant_data['recommendations']),
+        }
+        return jsonify(health_data)
+
+    crop, condition, confidence = result
+    condition_lower = condition.lower()
+    is_healthy = 'healthy' in condition_lower
+    bucket = classify_condition(condition_lower)
+
+    if is_healthy:
+        status_idx = 0
+    elif confidence > 0.85:
+        status_idx = 3  # Needs Attention
+    elif confidence > 0.6:
+        status_idx = 2  # Moderate Disease
+    else:
+        status_idx = 1  # Mild Disease (model itself is not very confident)
+
+    if is_healthy:
+        issue_text = plant_data['issues'][0]
+    else:
+        # crop/condition names come from the model's English class labels;
+        # full translation of all 38 class names into hi/kn is not yet built,
+        # so we show the model's finding plus a translated recommendation.
+        label = f"{crop} - {condition}" if crop else condition
+        issue_text = f"{label} detected" if lang == 'en' else label
+
     health_data = {
-        'health_status': random.choice(plant_data['health_statuses']),
-        'health_score': f"{random.randint(60, 98)}%",
-        'detected_issues': random.choice(plant_data['issues']),
-        'recommendations': random.choice(plant_data['recommendations'])
+        'health_status': plant_data['health_statuses'][status_idx],
+        'health_score': f"{round(confidence * 100)}%",
+        'detected_issues': issue_text,
+        'recommendations': plant_data['recommendations'][bucket],
     }
-    
     return jsonify(health_data)
 
 
