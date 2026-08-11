@@ -57,6 +57,130 @@ def load_plant_model():
 
 load_plant_model()
 
+# ---------------------------------------------------------------------------
+# Soil land-type model loading
+#
+# This model predicts LAND TYPE ONLY (a real, learnable visual task). It does
+# NOT predict climate, water facility, soil pH, yield, or crops - a photo
+# can't reveal rainfall data or lab-measured pH. Those fields come from
+# SOIL_LOOKUP below, a reference table keyed to the predicted land type, not
+# from the image itself.
+# ---------------------------------------------------------------------------
+SOIL_TFLITE_PATH = os.path.join(MODEL_DIR, 'soil_model.tflite')
+SOIL_CLASS_NAMES_PATH = os.path.join(MODEL_DIR, 'soil_class_names.json')
+
+soil_interpreter = None
+soil_class_names = None
+soil_model_load_error = None
+
+def load_soil_model():
+    global soil_interpreter, soil_class_names, soil_model_load_error
+    if not (os.path.exists(SOIL_TFLITE_PATH) and os.path.exists(SOIL_CLASS_NAMES_PATH)):
+        soil_model_load_error = f"Model files not found at {SOIL_TFLITE_PATH}"
+        print('[soil]', soil_model_load_error, '- using simulated predictions until a model is added.')
+        return
+    try:
+        try:
+            from ai_edge_litert.interpreter import Interpreter
+            print('[soil] Using ai_edge_litert')
+        except ImportError as e0:
+            print('[soil] ai_edge_litert unavailable (', e0, '), trying tflite_runtime')
+            try:
+                from tflite_runtime.interpreter import Interpreter
+                print('[soil] Using tflite_runtime')
+            except ImportError as e1:
+                print('[soil] tflite_runtime unavailable (', e1, '), trying tensorflow.lite')
+                from tensorflow.lite.python.interpreter import Interpreter
+        soil_interpreter = Interpreter(model_path=SOIL_TFLITE_PATH)
+        soil_interpreter.allocate_tensors()
+        with open(SOIL_CLASS_NAMES_PATH) as f:
+            soil_class_names = json.load(f)
+        print(f'[soil] Loaded model with {len(soil_class_names)} classes.')
+    except Exception as e:
+        soil_model_load_error = f"{type(e).__name__}: {e}"
+        print('[soil] Failed to load model, falling back to simulated predictions:', soil_model_load_error)
+        soil_interpreter = None
+
+load_soil_model()
+
+def run_soil_inference(image_bytes):
+    """Returns (land_type_class_name, confidence) or None if no model is loaded."""
+    if soil_interpreter is None:
+        return None
+    img = Image.open(io.BytesIO(image_bytes)).convert('RGB').resize(IMG_SIZE)
+    arr = np.asarray(img, dtype=np.float32)[np.newaxis, ...]
+
+    input_details = soil_interpreter.get_input_details()
+    output_details = soil_interpreter.get_output_details()
+    soil_interpreter.set_tensor(input_details[0]['index'], arr)
+    soil_interpreter.invoke()
+    output = soil_interpreter.get_tensor(output_details[0]['index'])[0]
+
+    idx = int(np.argmax(output))
+    confidence = float(output[idx])
+    class_name = soil_class_names[idx]  # e.g. "Black_Soil"
+    return class_name.replace('_', ' ').strip(), confidence
+
+# Reference lookup table: general agronomic information associated with each
+# soil type, NOT a per-photo prediction. Ranges are broad generalizations
+# (e.g. "Black Soil is often found in semi-arid Deccan plateau regions and
+# tends to be neutral-to-alkaline") meant as informational context, not
+# precise measurements - actual climate/pH/yield for any specific plot of
+# land requires local soil testing and weather data, not a photo.
+SOIL_LOOKUP = {
+    'Alluvial Soil': {
+        'climate': 'Subtropical / Tropical (river plains)', 'water_facility': 'Excellent',
+        'ph': '6.5 - 7.5 (near neutral)', 'yield_estimate': '3500 - 5000 kg/hectare (generally most fertile)',
+        'suitability': '90% Suitable', 'suggested_crops': 'Rice, Wheat, Sugarcane, Vegetables',
+    },
+    'Arid Soil': {
+        'climate': 'Arid / Desert', 'water_facility': 'Limited',
+        'ph': '7.5 - 8.5 (alkaline)', 'yield_estimate': '1500 - 2500 kg/hectare (low without irrigation)',
+        'suitability': '65% Suitable', 'suggested_crops': 'Millets (Bajra), Barley, Drought-resistant Pulses',
+    },
+    'Black Soil': {
+        'climate': 'Semi-Arid / Tropical (Deccan plateau)', 'water_facility': 'Good (retains moisture well)',
+        'ph': '7.0 - 8.5 (neutral to alkaline)', 'yield_estimate': '3000 - 4500 kg/hectare',
+        'suitability': '85% Suitable', 'suggested_crops': 'Cotton, Soybean, Sugarcane, Wheat',
+    },
+    'Laterite Soil': {
+        'climate': 'Tropical (high rainfall)', 'water_facility': 'Moderate (well-drained, nutrient-leached)',
+        'ph': '4.5 - 6.5 (acidic)', 'yield_estimate': '2000 - 3500 kg/hectare (needs fertilization)',
+        'suitability': '70% Suitable', 'suggested_crops': 'Tea, Coffee, Cashew, Rubber, Coconut',
+    },
+    'Mountain Soil': {
+        'climate': 'Temperate / Alpine (hilly terrain)', 'water_facility': 'Variable (slope-dependent)',
+        'ph': '5.0 - 6.5 (often slightly acidic)', 'yield_estimate': '2000 - 3500 kg/hectare (terrain-dependent)',
+        'suitability': '70% Suitable', 'suggested_crops': 'Tea, Spices, Orchard Fruits, Terraced Rice',
+    },
+    'Red Soil': {
+        'climate': 'Semi-Arid / Tropical', 'water_facility': 'Moderate',
+        'ph': '5.5 - 6.5 (slightly acidic)', 'yield_estimate': '2000 - 3000 kg/hectare (needs irrigation)',
+        'suitability': '75% Suitable', 'suggested_crops': 'Groundnut, Millets, Pulses, Cotton',
+    },
+    'Yellow Soil': {
+        'climate': 'Semi-Arid', 'water_facility': 'Limited to Moderate',
+        'ph': '5.5 - 6.5 (slightly acidic)', 'yield_estimate': '1800 - 2800 kg/hectare',
+        'suitability': '65% Suitable', 'suggested_crops': 'Millets, Pulses, Oilseeds',
+    },
+}
+# hi/kn: only the land-type name itself is translated (agronomic terms below
+# stay in English for now - same simplification already documented for plant
+# disease names in PLANT_HEALTH_README.md, translating all of climate/water
+# facility/crop terminology accurately is a separate follow-up task).
+SOIL_NAME_TRANSLATION = {
+    'hi': {
+        'Alluvial Soil': 'जलोढ़ मिट्टी', 'Arid Soil': 'शुष्क मिट्टी', 'Black Soil': 'काली मिट्टी',
+        'Laterite Soil': 'लैटेराइट मिट्टी', 'Mountain Soil': 'पर्वतीय मिट्टी', 'Red Soil': 'लाल मिट्टी',
+        'Yellow Soil': 'पीली मिट्टी',
+    },
+    'kn': {
+        'Alluvial Soil': 'ಮೆಕ್ಕಲು ಮಣ್ಣು', 'Arid Soil': 'ಶುಷ್ಕ ಮಣ್ಣು', 'Black Soil': 'ಕಪ್ಪು ಮಣ್ಣು',
+        'Laterite Soil': 'ಲ್ಯಾಟರೈಟ್ ಮಣ್ಣು', 'Mountain Soil': 'ಪರ್ವತ ಮಣ್ಣು', 'Red Soil': 'ಕೆಂಪು ಮಣ್ಣು',
+        'Yellow Soil': 'ಹಳದಿ ಮಣ್ಣು',
+    },
+}
+
 # Maps disease-name keywords -> one of the original recommendation "buckets"
 # (kept from the app's existing translated recommendation lists, so hi/kn
 # recommendations stay available without needing a full 38-class translation
@@ -297,32 +421,76 @@ def get_translations(lang):
 def predict_details():
     if 'image' not in request.files:
         return jsonify({'error': 'No image uploaded'}), 400
-    
+
     # Get language from request or default to English
     lang = request.form.get('language', 'en')
     soil_data = SOIL_DATA.get(lang, SOIL_DATA['en'])
-    
+
+    image_file = request.files['image']
+    result = None
+    try:
+        result = run_soil_inference(image_file.read())
+    except Exception as e:
+        print('[soil] Inference error, falling back to simulated result:', e)
+        result = None
+
+    if result is None:
+        # No trained model available yet (or inference failed) - old simulated behavior
+        prediction = {
+            'land_type': random.choice(soil_data['land_types']),
+            'climate': random.choice(soil_data['climates']),
+            'water_facility': random.choice(soil_data['water_facilities']),
+            'ph': f"{random.uniform(5.5, 8.5):.1f}",
+            'yield': f"{random.randint(2000, 5000)} {soil_data['yield_unit']}",
+            'suitability': f"{random.randint(70, 95)}% {soil_data['suitable']}",
+            'suggested_crops': random.choice(soil_data['crops']),
+        }
+        return jsonify(prediction)
+
+    land_type_en, confidence = result  # e.g. "Black Soil"
+    ref = SOIL_LOOKUP.get(land_type_en)
+    if ref is None:
+        # Model predicted a class name we don't have lookup data for -
+        # shouldn't happen if class_names.json matches SOIL_LOOKUP's keys,
+        # but fail safe rather than crash the request.
+        ref = {
+            'climate': 'Unknown', 'water_facility': 'Unknown', 'ph': 'Unknown',
+            'yield_estimate': 'Unknown', 'suitability': f'{round(confidence * 100)}% Suitable',
+            'suggested_crops': 'Consult local agricultural extension services',
+        }
+
+    display_land_type = SOIL_NAME_TRANSLATION.get(lang, {}).get(land_type_en, land_type_en)
+
     prediction = {
-        'land_type': random.choice(soil_data['land_types']),
-        'climate': random.choice(soil_data['climates']),
-        'water_facility': random.choice(soil_data['water_facilities']),
-        'ph': f"{random.uniform(5.5, 8.5):.1f}",
-        'yield': f"{random.randint(2000, 5000)} {soil_data['yield_unit']}",
-        'suitability': f"{random.randint(70, 95)}% {soil_data['suitable']}",
-        'suggested_crops': random.choice(soil_data['crops'])
+        'land_type': f"{display_land_type} ({round(confidence * 100)}% confidence)",
+        'climate': ref['climate'],
+        'water_facility': ref['water_facility'],
+        'ph': ref['ph'],
+        'yield': ref['yield_estimate'],
+        'suitability': ref['suitability'],
+        'suggested_crops': ref['suggested_crops'],
     }
-    
     return jsonify(prediction)
 
 @app.route('/model-status')
 def model_status():
     return jsonify({
-        'model_loaded': plant_interpreter is not None,
-        'load_error': plant_model_load_error,
-        'model_dir': MODEL_DIR,
-        'tflite_file_present': os.path.exists(TFLITE_PATH),
-        'class_names_file_present': os.path.exists(CLASS_NAMES_PATH),
-        'class_names': plant_class_names,
+        'plant_health': {
+            'model_loaded': plant_interpreter is not None,
+            'load_error': plant_model_load_error,
+            'model_dir': MODEL_DIR,
+            'tflite_file_present': os.path.exists(TFLITE_PATH),
+            'class_names_file_present': os.path.exists(CLASS_NAMES_PATH),
+            'class_names': plant_class_names,
+        },
+        'soil': {
+            'model_loaded': soil_interpreter is not None,
+            'load_error': soil_model_load_error,
+            'model_dir': MODEL_DIR,
+            'tflite_file_present': os.path.exists(SOIL_TFLITE_PATH),
+            'class_names_file_present': os.path.exists(SOIL_CLASS_NAMES_PATH),
+            'class_names': soil_class_names,
+        },
     })
 
 @app.route('/predict-plant-health', methods=['POST'])
